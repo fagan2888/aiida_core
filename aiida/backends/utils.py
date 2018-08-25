@@ -30,7 +30,7 @@ def validate_attribute_key(key):
     from aiida.common.exceptions import ValidationError
 
     if not isinstance(key, basestring):
-        raise ValidationError("The key must be a string.")
+        raise ValidationError("The key must be a string: {}".format(key))
     if not key:
         raise ValidationError("The key cannot be an empty string.")
     if AIIDA_ATTRIBUTE_SEP in key:

@@ -1622,7 +1622,9 @@ class StructureData(Data):
             n_sites = len(self.sites)
             if n_sites != len(new_positions) and conserve_particle:
                 raise ValueError(
-                    "the new positions should be as many as the previous structure.")
+                    "the new positions ({0}) should be as many as the previous structure ({1}).".format(
+                        len(new_positions), n_sites
+                    ))
 
             new_sites = []
             for i in range(n_sites):
