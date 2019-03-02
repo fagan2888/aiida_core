@@ -33,6 +33,7 @@ class GroupTypeString(Enum):
     IMPORTGROUP_TYPE = 'auto.import'
     VERDIAUTOGROUP_TYPE = 'auto.run'
     USER = 'user'
+    BASISGROUP_TYPE = 'data.basisset.family'
 
 
 # pylint: disable=invalid-name

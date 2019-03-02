@@ -13,6 +13,7 @@ from aiida.common.links import LinkType
 from ..process import Process, ProcessState
 from ..process_spec import CalcJobProcessSpec
 from .tasks import Waiting, UPLOAD_COMMAND
+from aiida.engine.processes.builder import CalcJobBuilder
 
 __all__ = ('CalcJob',)
 
@@ -86,6 +87,10 @@ class CalcJob(Process):
 
         spec.exit_code(10, 'ERROR_PARSING_FAILED', message='the parsing of the job failed')
         spec.exit_code(20, 'ERROR_FAILED', message='the job failed for an unspecified reason')
+
+    @classmethod
+    def get_builder(cls):
+        return CalcJobBuilder(cls)
 
     @classmethod
     def get_state_classes(cls):
