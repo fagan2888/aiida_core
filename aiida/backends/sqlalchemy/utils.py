@@ -475,36 +475,6 @@ def get_alembic_conf():
     return alembic_cfg
 
 
-def alembic_command(selected_command, *args, **kwargs):
-    """
-    This function calls the necessary alembic command with the provided
-    arguments.
-    :param selected_command: The command that should be called from the
-    alembic commands.
-    :param args: The arguments.
-    :param kwargs: The keyword arguments.
-    :return: Nothing.
-    """
-    if selected_command is None:
-        return
-
-    # Get the requested alembic command from the available commands
-    al_command = getattr(command, selected_command)
-
-    alembic_cfg = get_alembic_conf()
-    with sa.engine.begin() as connection:
-        alembic_cfg.attributes['connection'] = connection
-        if selected_command in ['current', 'history']:
-            if 'verbose' in args:
-                al_command(alembic_cfg, verbose=True)
-            else:
-                al_command(alembic_cfg, *args, **kwargs)
-        elif selected_command == 'revision':
-            al_command(alembic_cfg, message=args[0][0])
-        else:
-            al_command(alembic_cfg, *args, **kwargs)
-
-
 def delete_nodes_and_connections_sqla(pks_to_delete):
     """
     Delete all nodes corresponding to pks in the input.

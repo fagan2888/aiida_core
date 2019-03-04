@@ -242,7 +242,7 @@ def get_all_fields_info():
         "mtime": {
             "convert_type": "date"
         },
-        "type": {},
+        "node_type": {},
         "label": {},
         "nodeversion": {},
         "user": {
@@ -717,6 +717,11 @@ def import_data_dj(in_path, user_group=None, ignore_unknown_nodes=False,
                     else:
                         new_entries[model_name] = data['export_data'][model_name].copy()
 
+            # Show Comment mode if not silent and Comments exist in existing_entries
+            if not silent:
+                if COMMENT_ENTITY_NAME in existing_entries:
+                    print("Comment mode: {}".format(comment_mode))
+
             # I import data from the given model
             for model_name in model_order:
                 cls_signature = entity_names_to_signatures[model_name]
@@ -899,7 +904,7 @@ def import_data_dj(in_path, user_group=None, ignore_unknown_nodes=False,
                             # from here
                             deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                     key.startswith('_aiida_')}
-                            if models.DbNode.objects.filter(uuid=unique_id)[0].type.endswith('code.Code.'):
+                            if models.DbNode.objects.filter(uuid=unique_id)[0].node_type.endswith('code.Code.'):
                                 deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                         key == 'hidden'}
                             # till here
@@ -940,7 +945,7 @@ def import_data_dj(in_path, user_group=None, ignore_unknown_nodes=False,
                         # from here
                         deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                 key.startswith('_aiida_')}
-                        if models.DbNode.objects.filter(uuid=unique_id)[0].type.endswith('code.Code.'):
+                        if models.DbNode.objects.filter(uuid=unique_id)[0].node_type.endswith('code.Code.'):
                             deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                     key == 'hidden'}
                         # till here
@@ -1426,6 +1431,10 @@ def import_data_sqla(in_path, user_group=None, ignore_unknown_nodes=False,
                         # Why the copy:
                         new_entries[entity_name] = data['export_data'][entity_name].copy()
 
+            # Show Comment mode if not silent and Comments exist in existing_entries
+            if not silent:
+                if COMMENT_ENTITY_NAME in existing_entries:
+                    print("Comment mode: {}".format(comment_mode))
 
             # I import data from the given model
             for entity_sig in entity_sig_order:
@@ -1564,7 +1573,7 @@ def import_data_sqla(in_path, user_group=None, ignore_unknown_nodes=False,
                             # from here
                             deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                     key.startswith('_aiida_')}
-                            if o.type.endswith('code.Code.'):
+                            if o.node_type.endswith('code.Code.'):
                                 deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                         key == 'hidden'}
                             # till here
@@ -1604,7 +1613,7 @@ def import_data_sqla(in_path, user_group=None, ignore_unknown_nodes=False,
                         # from here
                         deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                 key.startswith('_aiida_')}
-                        if db_node.type.endswith('code.Code.'):
+                        if db_node.node_type.endswith('code.Code.'):
                             deserialized_extras = {key:value for key,value in deserialized_extras.items() if not
                                     key == 'hidden'}
                         # till here
@@ -1739,8 +1748,9 @@ def import_data_sqla(in_path, user_group=None, ignore_unknown_nodes=False,
                                     for node_uuid in groupnodes]
                 qb_nodes = QueryBuilder().append(
                     Node, filters={'id': {'in': nodes_ids_to_add}})
-                nodes_to_add = [n[0] for n in qb_nodes.all()]
-                group.add_nodes(nodes_to_add)
+                # Adding nodes to group avoiding the SQLA ORM to increase speed
+                nodes_to_add = [n[0].backend_entity for n in qb_nodes.all()]
+                group.backend_entity.add_nodes(nodes_to_add, skip_orm=True)
 
             ######################################################
             # Put everything in a specific group
@@ -1782,9 +1792,9 @@ def import_data_sqla(in_path, user_group=None, ignore_unknown_nodes=False,
                             counter += 1
 
                 # Add all the nodes to the new group
-                # TODO: decide if we want to return the group label 
-                nodes = [entry[0] for entry in QueryBuilder().append(Node, filters={'id': {'in': pks_for_group}}).all()]
-                group.add_nodes(nodes)
+                # Adding nodes to group avoiding the SQLA ORM to increase speed
+                nodes = [entry[0].backend_entity for entry in QueryBuilder().append(Node, filters={'id': {'in': pks_for_group}}).all()]
+                group.backend_entity.add_nodes(nodes, skip_orm=True)
 
                 if not silent:
                     print("IMPORTED NODES GROUPED IN IMPORT GROUP NAMED '{}'".format(group.label))
@@ -2254,7 +2264,7 @@ def export_tree(what, folder, allowed_licenses=None, forbidden_licenses=None,
 
     ## Universal "entities" attributed to all types of nodes
     # Logs
-    if include_logs:
+    if include_logs and to_be_exported:
         # Get related log(s) - universal for all nodes
         builder = QueryBuilder()
         builder.append(Log, filters={'dbnode_id': {'in': to_be_exported}}, project=['id'])
@@ -2262,7 +2272,7 @@ def export_tree(what, folder, allowed_licenses=None, forbidden_licenses=None,
         given_log_entry_ids.update(res)
 
     # Comments
-    if include_comments:
+    if include_comments and to_be_exported:
         # Get related log(s) - universal for all nodes
         builder = QueryBuilder()
         builder.append(Comment, filters={'dbnode_id': {'in': to_be_exported}}, project=['id'])
