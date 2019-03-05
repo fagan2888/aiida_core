@@ -96,7 +96,12 @@ class DbNode(Base):
         # SqlAlchemy a default *has* to be defined if one wants to get that value upon storing. But since defining a
         # default on the column in combination with the hack in `aiida.backend.SqlAlchemy.models.__init__` to force all
         # defaults to be populated upon instantiation, we have to unset the `mtime` attribute here manually.
-        self.mtime = None
+        #
+        # The only time that we allow mtime not to be null is when we explicitly pass mtime as a kwarg. This covers
+        # the case that a node is constructed based on some very predefined data like when we create nodes at the
+        # AiiDA import functions.
+        if 'mtime' not in kwargs:
+            self.mtime = None
 
         if self.attributes is None:
             self.attributes = dict()
@@ -244,7 +249,8 @@ class DbLink(Base):
     id = Column(Integer, primary_key=True)
     input_id = Column(
         Integer,
-        ForeignKey('db_dbnode.id', deferrable=True, initially="DEFERRED")
+        ForeignKey('db_dbnode.id', deferrable=True, initially="DEFERRED"),
+        index=True
     )
     output_id = Column(
         Integer,
@@ -253,14 +259,15 @@ class DbLink(Base):
             ondelete="CASCADE",
             deferrable=True,
             initially="DEFERRED"
-        )
+        ),
+        index=True
     )
 
     input = relationship("DbNode", primaryjoin="DbLink.input_id == DbNode.id")
     output = relationship("DbNode", primaryjoin="DbLink.output_id == DbNode.id")
 
     label = Column(String(255), index=True, nullable=False)
-    type = Column(String(255))
+    type = Column(String(255), index=True)
 
     # A calculation can have both a 'return' and a 'create' link to
     # a single data output node, which would violate the unique constraint

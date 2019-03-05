@@ -276,3 +276,106 @@ class TestNodeLinks(AiidaTestCase):
         uuids_outgoing = set(node.uuid for node in creator.get_outgoing().all_nodes())
         uuids_expected = set([data_one.uuid, data_two.uuid])
         self.assertEqual(uuids_outgoing, uuids_expected)
+
+    def test_get_node_by_label(self):
+        """Test the get_node_by_label() method of the `LinkManager`
+
+        In particular, check both the it returns the correct values, but also that it raises the expected
+        exceptions where appropriate (missing link with a given label, or more than one link)
+        """
+        data = Data().store()
+        calc_one_a = CalculationNode().store()
+        calc_one_b = CalculationNode().store()
+        calc_two = CalculationNode().store()
+
+        # Two calcs using the data with the same label
+        calc_one_a.add_incoming(data, link_type=LinkType.INPUT_CALC, link_label='input')
+        calc_one_b.add_incoming(data, link_type=LinkType.INPUT_CALC, link_label='input')
+        # A different label
+        calc_two.add_incoming(data, link_type=LinkType.INPUT_CALC, link_label='the_input')
+
+        # Retrieve a link when the label is unique
+        output_the_input = data.get_outgoing(link_type=LinkType.INPUT_CALC).get_node_by_label('the_input')
+        self.assertEqual(output_the_input.pk, calc_two.pk)
+
+        with self.assertRaises(exceptions.MultipleObjectsError):
+            data.get_outgoing(link_type=LinkType.INPUT_CALC).get_node_by_label('input')
+
+        with self.assertRaises(exceptions.NotExistent):
+            data.get_outgoing(link_type=LinkType.INPUT_CALC).get_node_by_label('some_weird_label')
+
+    def test_tab_completable_properties(self):
+        """Test properties to go from one node to a neighboring one"""
+        input1 = Data().store()
+        input2 = Data().store()
+
+        top_workflow = WorkflowNode().store()
+        workflow = WorkflowNode().store()
+        calc1 = CalculationNode().store()
+        calc2 = CalculationNode().store()
+
+        output1 = Data().store()
+        output2 = Data().store()
+
+        # top_workflow has two inputs, proxies them to workflow, that in turn
+        # calls two calcs (passing 1 data to each),
+        # and return the two data nodes returned one by each called calculation
+        top_workflow.add_incoming(input1, link_type=LinkType.INPUT_WORK, link_label='a')
+        top_workflow.add_incoming(input2, link_type=LinkType.INPUT_WORK, link_label='b')
+
+        workflow.add_incoming(input1, link_type=LinkType.INPUT_WORK, link_label='a')
+        workflow.add_incoming(input2, link_type=LinkType.INPUT_WORK, link_label='b')
+        workflow.add_incoming(top_workflow, link_type=LinkType.CALL_WORK, link_label='CALL')
+
+        calc1.add_incoming(input1, link_type=LinkType.INPUT_CALC, link_label='input_value')
+        calc1.add_incoming(workflow, link_type=LinkType.CALL_CALC, link_label='CALL')
+        output1.add_incoming(calc1, link_type=LinkType.CREATE, link_label='result')
+
+        calc2.add_incoming(input2, link_type=LinkType.INPUT_CALC, link_label='input_value')
+        calc2.add_incoming(workflow, link_type=LinkType.CALL_CALC, link_label='CALL')
+        output2.add_incoming(calc2, link_type=LinkType.CREATE, link_label='result')
+
+        output1.add_incoming(workflow, link_type=LinkType.RETURN, link_label='result_a')
+        output2.add_incoming(workflow, link_type=LinkType.RETURN, link_label='result_b')
+        output1.add_incoming(top_workflow, link_type=LinkType.RETURN, link_label='result_a')
+        output2.add_incoming(top_workflow, link_type=LinkType.RETURN, link_label='result_b')
+
+        ## Now we test the methods
+        # creator
+        self.assertEqual(output1.creator.pk, calc1.pk)
+        self.assertEqual(output2.creator.pk, calc2.pk)
+
+        # caller (for calculations)
+        self.assertEqual(calc1.caller.pk, workflow.pk)
+        self.assertEqual(calc2.caller.pk, workflow.pk)
+
+        # caller (for workflows)
+        self.assertEqual(workflow.caller.pk, top_workflow.pk)
+
+        # .inputs for calculations
+        self.assertEqual(calc1.inputs.input_value.pk, input1.pk)
+        self.assertEqual(calc2.inputs.input_value.pk, input2.pk)
+        with self.assertRaises(exceptions.NotExistent):
+            _ = calc1.inputs.some_label
+
+        # .inputs for workflows
+        self.assertEqual(top_workflow.inputs.a.pk, input1.pk)
+        self.assertEqual(top_workflow.inputs.b.pk, input2.pk)
+        self.assertEqual(workflow.inputs.a.pk, input1.pk)
+        self.assertEqual(workflow.inputs.b.pk, input2.pk)
+        with self.assertRaises(exceptions.NotExistent):
+            _ = workflow.inputs.some_label
+
+        # .outputs for calculations
+        self.assertEqual(calc1.outputs.result.pk, output1.pk)
+        self.assertEqual(calc2.outputs.result.pk, output2.pk)
+        with self.assertRaises(exceptions.NotExistent):
+            _ = calc1.outputs.some_label
+
+        # .outputs for workflows
+        self.assertEqual(top_workflow.outputs.result_a.pk, output1.pk)
+        self.assertEqual(top_workflow.outputs.result_b.pk, output2.pk)
+        self.assertEqual(workflow.outputs.result_a.pk, output1.pk)
+        self.assertEqual(workflow.outputs.result_b.pk, output2.pk)
+        with self.assertRaises(exceptions.NotExistent):
+            _ = workflow.outputs.some_label  #  noqa

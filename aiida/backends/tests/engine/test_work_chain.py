@@ -21,9 +21,11 @@ from tornado import gen
 
 from aiida import orm
 from aiida.backends.testbase import AiidaTestCase
+from aiida.common import exceptions
 from aiida.common.links import LinkType
 from aiida.common.utils import Capturing
-from aiida.engine import ExitCode, Process, ToContext, WorkChain, if_, while_, return_, run, run_get_node
+from aiida.engine import ExitCode, Process, ToContext, WorkChain, if_, while_, return_, run, run_get_node, submit
+from aiida.engine import launch
 from aiida.engine.persistence import ObjectLoader
 from aiida.manage.manager import get_manager
 from aiida.orm import load_node, Bool, Float, Int, Str
@@ -266,7 +268,7 @@ class IfTest(WorkChain):
 class TestContext(AiidaTestCase):
 
     def test_attributes(self):
-        wc = WorkChain()
+        wc = IfTest()
         wc.ctx.new_attr = 5
         self.assertEqual(wc.ctx.new_attr, 5)
 
@@ -275,7 +277,7 @@ class TestContext(AiidaTestCase):
             wc.ctx.new_attr
 
     def test_dict(self):
-        wc = WorkChain()
+        wc = IfTest()
         wc.ctx['new_attr'] = 5
         self.assertEqual(wc.ctx['new_attr'], 5)
 
@@ -293,6 +295,23 @@ class TestWorkchain(AiidaTestCase):
     def tearDown(self):
         super(TestWorkchain, self).tearDown()
         self.assertIsNone(Process.current())
+
+    def test_run_base_class(self):
+        """Verify that it is impossible to run, submit or instantiate a base `WorkChain` class."""
+        with self.assertRaises(exceptions.InvalidOperation):
+            WorkChain()
+
+        with self.assertRaises(exceptions.InvalidOperation):
+            launch.run(WorkChain)
+
+        with self.assertRaises(exceptions.InvalidOperation):
+            launch.run_get_node(WorkChain)
+
+        with self.assertRaises(exceptions.InvalidOperation):
+            launch.run_get_pid(WorkChain)
+
+        with self.assertRaises(exceptions.InvalidOperation):
+            launch.submit(WorkChain)
 
     def test_run(self):
         A = Str('A')
@@ -390,15 +409,15 @@ class TestWorkchain(AiidaTestCase):
                 return ToContext(r1=self.submit(ReturnA), r2=self.submit(ReturnB))
 
             def s2(self):
-                test_case.assertEquals(self.ctx.r1.out.res, A)
-                test_case.assertEquals(self.ctx.r2.out.res, B)
+                test_case.assertEquals(self.ctx.r1.outputs.res, A)
+                test_case.assertEquals(self.ctx.r2.outputs.res, B)
 
                 # Try overwriting r1
                 return ToContext(r1=self.submit(ReturnB))
 
             def s3(self):
-                test_case.assertEquals(self.ctx.r1.out.res, B)
-                test_case.assertEquals(self.ctx.r2.out.res, B)
+                test_case.assertEquals(self.ctx.r1.outputs.res, B)
+                test_case.assertEquals(self.ctx.r2.outputs.res, B)
 
         run_and_check_success(Wf)
 
@@ -500,7 +519,7 @@ class TestWorkchain(AiidaTestCase):
 
             def check(self):
                 pass
-                assert self.ctx.subwc.out.value == Int(5)
+                assert self.ctx.subwc.outputs.value == Int(5)
 
         class SubWorkChain(WorkChain):
 
@@ -528,7 +547,7 @@ class TestWorkchain(AiidaTestCase):
                 return ToContext(subwc=self.submit(SubWorkChain))
 
             def check(self):
-                assert self.ctx.subwc.out.value == Int(5)
+                assert self.ctx.subwc.outputs.value == Int(5)
 
         class SubWorkChain(WorkChain):
 
@@ -630,8 +649,8 @@ class TestWorkchain(AiidaTestCase):
                 return ToContext(result_b=self.submit(SimpleWc))
 
             def result(self):
-                test_case.assertEquals(self.ctx.result_a.out._return, val)
-                test_case.assertEquals(self.ctx.result_b.out._return, val)
+                test_case.assertEquals(self.ctx.result_a.outputs._return, val)
+                test_case.assertEquals(self.ctx.result_b.outputs._return, val)
 
         run_and_check_success(Workchain)
 

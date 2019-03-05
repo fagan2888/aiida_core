@@ -11,6 +11,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
+import contextlib
 import six
 from six.moves import zip, range
 from django.db import models as m
@@ -224,40 +225,17 @@ class DbNode(m.Model):
 
 @python_2_unicode_compatible
 class DbLink(m.Model):
-    """
-    Direct connection between two dbnodes. The label is identifying the
-    link type.
-    """
+    """Direct connection between two dbnodes. The label is identifying thelink type."""
+
     # If I delete an output, delete also the link; if I delete an input, stop
     # NOTE: this will in most cases render a DbNode.objects.filter(...).delete()
     # call unusable because some nodes will be inputs; Nodes will have to
     #    be deleted in the proper order (or links will need to be deleted first)
-    input = m.ForeignKey('DbNode', related_name='output_links',
-                         on_delete=m.PROTECT)
-    output = m.ForeignKey('DbNode', related_name='input_links',
-                          on_delete=m.CASCADE)
-    # label for data input for calculation
+    # The `input` and `output` columns do not need an explicit `db_index` as it is `True` by default for foreign keys
+    input = m.ForeignKey('DbNode', related_name='output_links', on_delete=m.PROTECT)
+    output = m.ForeignKey('DbNode', related_name='input_links', on_delete=m.CASCADE)
     label = m.CharField(max_length=255, db_index=True, blank=False)
     type = m.CharField(max_length=255, db_index=True, blank=True)
-
-    class Meta:
-        # I cannot add twice the same link
-        # I want unique labels among all inputs of a node
-        # NOTE!
-        # I cannot add ('input', 'label') because in general
-        # if the input is a 'data' and I want to add it more than
-        # once to different calculations, the different links must be
-        # allowed to have the same name. For calculations, it is the
-        # responsibility of the output plugin to avoid to have many
-        # times the same name.
-        #
-        # A calculation can have both a 'return' and a 'create' link to
-        # a single data output node, which would violate the unique constraint
-        # defined below, since the difference in link type is not considered.
-        # The distinction between the type of a 'create' and a 'return' link is not
-        # implemented at the moment, so the unique constraint is disabled.
-        # unique_together = ("output", "label")
-        pass
 
     def __str__(self):
         return "{} ({}) --> {} ({})".format(
@@ -1390,7 +1368,7 @@ class DbAuthInfo(m.Model):
     # Delete the DbAuthInfo if either the user or the computer are removed
     aiidauser = m.ForeignKey(AUTH_USER_MODEL, on_delete=m.CASCADE)
     dbcomputer = m.ForeignKey(DbComputer, on_delete=m.CASCADE)
-    auth_params = m.TextField(default='{}')  # Will store a json; contains mainly the remoteuser
+    auth_params = m.TextField(default="{}")  # Will store a json; contains mainly the remoteuser
     # and the private_key
 
     # The keys defined in the metadata of the DbAuthInfo will override the
@@ -1578,3 +1556,54 @@ class DbWorkflowStep(m.Model):
     def __str__(self):
         return "Step {} for workflow {} [{}]".format(self.name,
                                                      self.parent.module_class, self.parent.pk)
+
+
+@contextlib.contextmanager
+def suppress_auto_now(list_of_models_fields):
+    """
+    This context manager disables the auto_now & editable flags for the
+    fields of the given models.
+    This is useful when we would like to update the datetime fields of an
+    entry bypassing the automatic set of the date (with the current time).
+    This is very useful when entries are imported and we would like to keep e.g.
+    the modification time that we set during the import and not allow Django
+    to set it to the datetime that corresponds to when the entry was saved.
+    In the end the flags are returned to their original value.
+    :param list_of_models_fields: A list of (model, fields) tuples for
+    which the flags will be updated. The model is an object that corresponds
+    to the model objects and fields is a list of strings with the field names.
+    """
+    # Here we store the original values of the fields of the models that will
+    # be updated
+    # E.g.
+    # _original_model_values = {
+    #   ModelA: [fieldA: {
+    #                       'auto_now': orig_valA1
+    #                       'editable': orig_valA2
+    #            },
+    #            fieldB: {
+    #                       'auto_now': orig_valB1
+    #                       'editable': orig_valB2
+    #            }
+    #    ]
+    #   ...
+    # }
+    _original_model_values = dict()
+    for model, fields in list_of_models_fields:
+        _original_field_values = dict()
+        for field in model._meta.local_fields:
+            if field.name in fields:
+                _original_field_values[field] = {
+                    'auto_now': field.auto_now,
+                    'editable': field.editable,
+                }
+                field.auto_now = False
+                field.editable = True
+        _original_model_values[model] = _original_field_values
+    try:
+        yield
+    finally:
+        for model in _original_model_values:
+            for field in _original_model_values[model]:
+                field.auto_now = _original_model_values[model][field]['auto_now']
+                field.editable = _original_model_values[model][field]['editable']
