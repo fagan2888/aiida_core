@@ -147,6 +147,7 @@ DB_TEST_LIST = {
         'query': ['aiida.backends.tests.test_query'],
         'restapi': ['aiida.backends.tests.test_restapi'],
         'tools.data.orbital': ['aiida.backends.tests.tools.data.orbital.test_orbitals'],
+        'tools.groups.grouppath': ['aiida.backends.tests.tools.groups.test_grouppath'],
         'tools.importexport.common.archive': ['aiida.backends.tests.tools.importexport.common.test_archive'],
         'tools.importexport.complex': ['aiida.backends.tests.tools.importexport.test_complex'],
         'tools.importexport.prov_redesign': ['aiida.backends.tests.tools.importexport.test_prov_redesign'],

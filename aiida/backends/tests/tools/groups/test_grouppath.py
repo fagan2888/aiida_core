@@ -13,42 +13,27 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
-import pytest
-
 from aiida import orm
+from aiida.backends.testbase import AiidaTestCase
 from aiida.tools.groups import GroupPaths
 
 
-@pytest.fixture(scope='session')
-def fixture_environment():
-    """Setup a complete AiiDA test environment, with configuration, profile, database and repository."""
-    from aiida.manage.fixtures import fixture_manager
-    with fixture_manager() as manager:
-        yield manager
+class TestGroups(AiidaTestCase):
+    """Test backend entities and their collections"""
 
+    def setUp(self):
+        """Setup the database with a number of Groups."""
+        for label in ['f1/f2/f3a', 'f1/f2/f3b', 'f1/f2/f3-c/f4a']:
+            orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
 
-@pytest.fixture(scope='function')
-def new_database(fixture_environment):
-    """Clear the database after each test."""
-    yield
-    fixture_environment.reset_db()
-
-
-@pytest.fixture(scope='function')
-def db_with_groups(new_database):
-    """Setup the database with a number of Groups."""
-    for label in ['f1/f2/f3a', 'f1/f2/f3b', 'f1/f2/f3-c/f4a']:
-        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
-
-
-def test_simple(db_with_groups):
-    """Test the core functionality of the `GroupPaths` class."""
-    grouppaths = GroupPaths()
-    assert 'f1' in grouppaths
-    assert 'f2' in grouppaths.f1
-    assert 'f2' in grouppaths['f1']
-    assert 'f3a' in grouppaths['f1/f2']
-    assert isinstance(grouppaths.f1.f2.f3a, orm.Group)
-    assert isinstance(grouppaths.f1.f2.f3__c, GroupPaths)
-    assert len(grouppaths.f1.f2) == 3
-    assert sorted(grouppaths.f1.f2) == [('f3-c', False), ('f3a', True), ('f3b', True)]
+    def test_simple(self):
+        """Test the core functionality of the `GroupPaths` class."""
+        grouppaths = GroupPaths()
+        self.assertIn('f1', grouppaths)
+        self.assertIn('f2', grouppaths['f1'])
+        self.assertIn('f2', grouppaths.f1)
+        self.assertIn('f3a', grouppaths['f1/f2'])
+        self.assertIsInstance(grouppaths.f1.f2.f3a, orm.Group)
+        self.assertIsInstance(grouppaths.f1.f2.f3__c, GroupPaths)
+        self.assertEqual(len(grouppaths.f1.f2), 3)
+        self.assertEqual(sorted(grouppaths.f1.f2), [('f3-c', False), ('f3a', True), ('f3b', True)])
