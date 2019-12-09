@@ -11,4 +11,4 @@ from __future__ import print_function
 from __future__ import absolute_import
 from .grouppaths import *
 
-__all__ = (grouppaths.__all__,)
+__all__ = grouppaths.__all__

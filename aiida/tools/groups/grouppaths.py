@@ -19,7 +19,7 @@ from aiida import orm
 __all__ = ('GroupPaths',)
 
 
-class GroupPaths(object):
+class GroupPaths:
     """A class to provide attribute/key access to AiiDA Groups with delimited labels."""
 
     def __init__(self, delim='/', frozen=True, path=()):
