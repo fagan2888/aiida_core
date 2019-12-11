@@ -7,7 +7,7 @@
 # For further information on the license, see the LICENSE.txt file        #
 # For further information please visit http://www.aiida.net               #
 ###########################################################################
-"""Tests for creating graphs (using graphviz)"""
+"""Tests for GroupPath"""
 # pylint: disable=redefined-outer-name,unused-argument
 from __future__ import division
 from __future__ import print_function
@@ -16,13 +16,14 @@ from __future__ import absolute_import
 import pytest
 
 from aiida import orm
-from aiida.tools.groups import GroupPaths
+from aiida.tools.groups.grouppaths import GroupPath, InvalidPath
 
 
 @pytest.fixture(scope='session')
 def fixture_environment():
     """Setup a complete AiiDA test environment, with configuration, profile, database and repository."""
     from aiida.manage.fixtures import fixture_manager
+
     with fixture_manager() as manager:
         yield manager
 
@@ -34,21 +35,40 @@ def new_database(fixture_environment):
     fixture_environment.reset_db()
 
 
-@pytest.fixture(scope='function')
-def db_with_groups(new_database):
+def test_basic(new_database):
     """Setup the database with a number of Groups."""
-    for label in ['f1/f2/f3a', 'f1/f2/f3b', 'f1/f2/f3-c/f4a']:
+    for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
         orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
-
-
-def test_simple(db_with_groups):
-    """Test the core functionality of the `GroupPaths` class."""
-    grouppaths = GroupPaths()
-    assert 'f1' in grouppaths
-    assert 'f2' in grouppaths.f1
-    assert 'f2' in grouppaths['f1']
-    assert 'f3a' in grouppaths['f1/f2']
-    assert isinstance(grouppaths.f1.f2.f3a, orm.Group)
-    assert isinstance(grouppaths.f1.f2.f3__c, GroupPaths)
-    assert len(grouppaths.f1.f2) == 3
-    assert sorted(grouppaths.f1.f2) == [('f3-c', False), ('f3a', True), ('f3b', True)]
+    for path in ['/a', 'a/', '/a/', 'a//b']:
+        with pytest.raises(InvalidPath):
+            GroupPath(path=path)
+    group_path = GroupPath()
+    assert group_path.path == ''
+    assert group_path.delimiter == '/'
+    assert group_path.parent is None
+    assert group_path.is_virtual
+    assert not group_path.has_group
+    assert group_path.get_group() is None
+    assert group_path.get_nodes() is None
+    assert (group_path / 'a').path == 'a'
+    assert (group_path / 'a' / 'b').path == 'a/b'
+    assert (group_path / 'a/b').path == 'a/b'
+    assert group_path['a/b'].path == 'a/b'
+    assert 'a' in group_path
+    assert 'x' not in group_path
+    assert group_path['a'].has_group
+    assert group_path.get_group() is None
+    assert isinstance(group_path['a'].get_group(), orm.Group)
+    assert group_path['a'].get_nodes() is not None
+    assert group_path['a'].get_or_create_group()[1] is False
+    assert len(group_path) == 1
+    assert sorted([(c.path, c.is_virtual) for c in group_path.children]) == [('a', False)]
+    child = next(group_path.children)
+    assert child.root == group_path
+    assert child.parent == group_path
+    assert len(child) == 3
+    assert sorted([(c.path, c.is_virtual) for c in child]) == [('a/b', False), ('a/c', True), ('a/f', False)]
+    assert sorted([c.path for c in group_path.walk()]) == ['a', 'a/b', 'a/c', 'a/c/d', 'a/c/e', 'a/c/e/g', 'a/f']
+    assert group_path['a'].has_group
+    group_path['a'].delete_group()
+    assert not group_path['a'].has_group
