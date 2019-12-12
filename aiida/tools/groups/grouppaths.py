@@ -17,12 +17,13 @@ import re
 from typing import Iterable, List, Optional  # pylint: disable=unused-import
 import warnings
 
-import six
-
 from aiida import orm
 from aiida.common.exceptions import NotExistent
 
 __all__ = ('GroupPath', 'InvalidPath')
+
+# TODO check 'official' regex for attributes
+RegexAttribute = re.compile('^[a-zA-Z][\\_a-zA-Z0-9]*$')
 
 # TODO document methods
 
@@ -34,18 +35,19 @@ class InvalidPath(Exception):
 class GroupPath:
     """A class to provide label delimited access to groups."""
 
-    def __init__(self, path='', parent=None, delimiter='/'):
-        # type: (str, Optional[GroupPath], str)
-        self._delimiter = delimiter
-        # TODO validator
+    def __init__(self, path='', type_string=orm.GroupTypeString.USER.value, parent=None):
+        # type: (str, Optional[str], Optional[GroupPath], str)
+        self._delimiter = '/'
+        if type_string is not None and not isinstance(type_string, str):
+            raise AssertionError('type_string must be None or str: {}'.format(type_string))
+        # TODO assert type_string is valid GroupTypeString value?
+        # TODO check that GroupTypeString.USER is the correct default, or None
+        self._type_string = type_string
         self._path_string = self._validate_path(path)
-        self._path_list = self._path_string.split(delimiter) if path else []
+        self._path_list = self._path_string.split(self._delimiter) if path else []
         if parent is not None and not isinstance(parent, GroupPath):
             raise TypeError('parent is not None or GroupPath: {}'.format(parent))
         self._parent = parent
-
-        # TODO additional filters for get/create/query groups, e.g. type_string
-        # set in init or allow kwargs on methods?
 
     def _validate_path(self, path):
         if path == self._delimiter:
@@ -57,6 +59,13 @@ class GroupPath:
     def __repr__(self):
         # type: () -> str
         return "GroupPath('{}') @ {}".format(self.path, id(self))
+
+    def __eq__(self, other):
+        if not isinstance(other, GroupPath):
+            return False
+        if other.path == self.path and other.type_string == self.type_string:
+            return True
+        return False
 
     @property
     def path(self):
@@ -74,40 +83,40 @@ class GroupPath:
         return self._delimiter
 
     @property
+    def type_string(self):
+        # type: () -> str
+        return self._type_string
+
+    @property
     def parent(self):
         # type: () -> Optional[GroupPath]
         return self._parent
 
-    @property
-    def root(self):
-        # type: () -> GroupPath
-        # TODO check for circular recursion?
-        if self.parent is None:
-            return self
-        return self.parent.root
-
     def __truediv__(self, path):
         # type: (str) -> GroupPath
-        if not isinstance(path, six.string_types):
+        if not isinstance(path, str):
             raise TypeError('path is not a string: {}'.format(path))
         path = self._validate_path(path)
-        parent = self
+        child = self
         for key in path.split(self.delimiter):
-            parent = GroupPath(
-                path=parent.path + self.delimiter + key if parent.path else key,
-                parent=parent,
-                delimiter=self._delimiter,
+            child = GroupPath(
+                path=child.path + self.delimiter + key if child.path else key,
+                type_string=self.type_string,
+                parent=child
             )
-        return parent
+        return child
 
     def __getitem__(self, path):
         # type: (str) -> GroupPath
         return self.__truediv__(path)
 
-    def get_group(self):
+    @property
+    def group(self):
         # type: () -> Optional[orm.Group]
         try:
-            return orm.Group.objects.get(label=self.path)
+            if self.type_string is not None:
+                return orm.Group.objects.get(label=self.path)
+            return orm.Group.objects.get(label=self.path, type_string=self.type_string)
         except NotExistent:
             return None
 
@@ -115,32 +124,28 @@ class GroupPath:
     def is_virtual(self):
         # type: () -> bool
         # TODO can we query for Group without loading (to improve speed)
-        return self.get_group() is None
+        return self.group is None
 
-    @property
-    def has_group(self):
-        # type: () -> bool
-        return not self.is_virtual
-
-    def get_or_create_group(self, **kwargs):
+    def get_or_create_group(self):
         # type: () -> (orm.Group, bool)
-        return orm.Group.objects.get_or_create(label=self.path, **kwargs)
+        if self.type_string is not None:
+            return orm.Group.objects.get_or_create(label=self.path, type_string=self.type_string)
+        return orm.Group.objects.get_or_create(label=self.path)
 
     def delete_group(self):
-        group = self.get_group()
+        group = self.group
         if group is not None:
             orm.Group.objects.delete(group.id)
-
-    def get_nodes(self):
-        # type: () -> Optional[Iterable]
-        group = self.get_group()
-        return None if group is None else group.nodes
 
     @property
     def children(self):
         # type: () -> Iterable[GroupPath]
         query = orm.QueryBuilder()
-        query.append(orm.Group, project='label')
+        query.append(
+            orm.Group,
+            filters={'type_string': self.type_string} if self.type_string is not None else {},
+            project='label'
+        )
         yielded = []
         for (label,) in query.iterall():
             path = label.split(self._delimiter)
@@ -150,7 +155,7 @@ class GroupPath:
             if (path_string not in yielded and path[:len(self._path_list)] == self._path_list):
                 yielded.append(path_string)
                 try:
-                    yield GroupPath(path=path_string, parent=self, delimiter=self._delimiter)
+                    yield GroupPath(path=path_string, type_string=self.type_string, parent=self)
                 except InvalidPath:
                     # TODO raise warning or exception? (maybe set what to do in init?)
                     warnings.warn('invalid path encountered: {}'.format(path_string))
@@ -178,7 +183,7 @@ class GroupPath:
                 yield sub_child
 
     @property
-    def attr(self):
+    def browse(self):
         return GroupAttr(self)
 
 
@@ -187,29 +192,18 @@ class GroupAttr:
     def __init__(self, group_path):
         self._group_path = group_path  # type: GroupPath
         # TODO how to deal with key -> attribute clashes # pylint: disable=fixme
-        self._attr_to_child = {self._sanitize_attr(c.path_list[-1]): c for c in self._group_path.children}
+        self._attr_to_child = {c.path_list[-1]: c for c in self._group_path.children if RegexAttribute.match(c.path_list[-1])}
 
     def __repr__(self):
         # type: () -> str
         return "GroupAttr('{}') @ {}".format(self._group_path.path, id(self))
 
-    def get_path(self):
+    def __call__(self):
         return self._group_path
-
-    @staticmethod
-    def _sanitize_attr(path):
-        """Return a path element string, that can be used as an attribute.
-        NOTE: this can cause key clashes
-        """
-        new_path = re.sub(r'[^\_a-zA-Z0-9]', '__', path)
-        if re.match(r'^[0-9]', new_path):
-            # attribute can't start with a number
-            new_path = 'i' + new_path
-        return new_path
 
     def __dir__(self):
         """Return a list of available attributes."""
-        return list(self._attr_to_child.keys()) + ['get_path']
+        return list(self._attr_to_child.keys())
 
     def __getattr__(self, attr):
         """Return the requested attribute name."""
@@ -219,8 +213,4 @@ class GroupAttr:
             child = self._attr_to_child[attr]
         except KeyError:
             raise AttributeError(attr)
-        return GroupAttr(child)
-
-    def __getitem__(self, item):
-        child = self._attr_to_child[item]
         return GroupAttr(child)
