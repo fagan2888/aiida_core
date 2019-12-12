@@ -16,7 +16,7 @@ from __future__ import absolute_import
 import pytest
 
 from aiida import orm
-from aiida.tools.groups.grouppaths import GroupPath, InvalidPath
+from aiida.tools.groups.grouppaths import GroupAttr, GroupPath, InvalidPath
 
 
 @pytest.fixture(scope='session')
@@ -72,3 +72,18 @@ def test_basic(new_database):
     assert group_path['a'].has_group
     group_path['a'].delete_group()
     assert not group_path['a'].has_group
+
+
+def test_attr(new_database):
+    """Setup the database with a number of Groups."""
+    for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
+        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
+    group_path = GroupPath()
+    # print(group_path.attr.a.c._group_path)
+    # print(group_path.attr.a.c._attr_to_child)
+    assert isinstance(group_path.attr.a.c.d, GroupAttr)
+    assert isinstance(group_path.attr.a.c['d'], GroupAttr)
+    assert isinstance(group_path.attr.a.c.d.get_path(), GroupPath)
+    assert group_path.attr.a.c.d.get_path().path == 'a/c/d'
+    with pytest.raises(AttributeError):
+        group_path.attr.a.c.x  # pylint: disable=pointless-statement

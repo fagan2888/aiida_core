@@ -13,6 +13,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
+import re
 from typing import Iterable, List, Optional  # pylint: disable=unused-import
 import warnings
 
@@ -61,6 +62,11 @@ class GroupPath:
     def path(self):
         # type: () -> str
         return self._path_string
+
+    @property
+    def path_list(self):
+        # type: () -> List[str]
+        return self._path_list[:]
 
     @property
     def delimiter(self):
@@ -171,4 +177,50 @@ class GroupPath:
             for sub_child in child.walk():
                 yield sub_child
 
-    # TODO attribute access
+    @property
+    def attr(self):
+        return GroupAttr(self)
+
+
+class GroupAttr:
+
+    def __init__(self, group_path):
+        self._group_path = group_path  # type: GroupPath
+        # TODO how to deal with key -> attribute clashes # pylint: disable=fixme
+        self._attr_to_child = {self._sanitize_attr(c.path_list[-1]): c for c in self._group_path.children}
+
+    def __repr__(self):
+        # type: () -> str
+        return "GroupAttr('{}') @ {}".format(self._group_path.path, id(self))
+
+    def get_path(self):
+        return self._group_path
+
+    @staticmethod
+    def _sanitize_attr(path):
+        """Return a path element string, that can be used as an attribute.
+        NOTE: this can cause key clashes
+        """
+        new_path = re.sub(r'[^\_a-zA-Z0-9]', '__', path)
+        if re.match(r'^[0-9]', new_path):
+            # attribute can't start with a number
+            new_path = 'i' + new_path
+        return new_path
+
+    def __dir__(self):
+        """Return a list of available attributes."""
+        return list(self._attr_to_child.keys()) + ['get_path']
+
+    def __getattr__(self, attr):
+        """Return the requested attribute name."""
+        if attr == 'get_child':
+            return self.get_child
+        try:
+            child = self._attr_to_child[attr]
+        except KeyError:
+            raise AttributeError(attr)
+        return GroupAttr(child)
+
+    def __getitem__(self, item):
+        child = self._attr_to_child[item]
+        return GroupAttr(child)
