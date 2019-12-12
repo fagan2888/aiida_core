@@ -436,6 +436,7 @@ Below is a list with all available subcommands.
       delete        Delete a group.
       description   Change the description of a group.
       list          Show a list of existing groups.
+      path          Show a list of existing groups.
       relabel       Change the label of a group.
       remove-nodes  Remove nodes from a group.
       show          Show information for a given group.

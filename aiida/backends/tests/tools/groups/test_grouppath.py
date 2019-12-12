@@ -87,3 +87,28 @@ def test_attr(new_database):
     assert group_path.attr.a.c.d.get_path().path == 'a/c/d'
     with pytest.raises(AttributeError):
         group_path.attr.a.c.x  # pylint: disable=pointless-statement
+
+
+def test_cmndline():
+    """Test ``verdi group path``"""
+    from aiida.cmdline.commands.cmd_group import group_path
+    from click.testing import CliRunner
+    for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
+        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
+    cli_runner = CliRunner()
+    result = cli_runner.invoke(group_path)
+    assert result.exit_code == 0, result.exception
+    # print(result.output)
+    assert result.output == (
+        """\
+Path     Virtual      Children
+-------  ---------  ----------
+a        False               3
+a/b      False               0
+a/c      True                2
+a/c/d    False               0
+a/c/e    True                1
+a/c/e/g  False               0
+a/f      False               0
+"""
+    )

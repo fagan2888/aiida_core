@@ -353,3 +353,17 @@ def group_copy(source_group, destination_group):
     # Copy nodes
     dest_group.add_nodes(list(source_group.nodes))
     echo.echo_success('Nodes copied from group<{}> to group<{}>'.format(source_group.label, dest_group.label))
+
+
+@verdi_group.command('path')
+@with_dbenv()
+def group_path():
+    """Show a list of existing groups."""
+    from aiida.tools.groups.grouppaths import GroupPath
+    from tabulate import tabulate
+
+    path = GroupPath()
+    table = []
+    for child in path.walk():
+        table.append([child.path, child.is_virtual, len(child)])
+    echo.echo(tabulate(table, headers=['Path', 'Virtual', 'Children']))
