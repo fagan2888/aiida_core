@@ -356,14 +356,19 @@ def group_copy(source_group, destination_group):
 
 
 @verdi_group.command('path')
+@click.option('-l', 'show_all', is_flag=True, default=False, help='Show all group paths')
 @with_dbenv()
-def group_path():
+def group_path(show_all):
     """Show a list of existing groups."""
     from aiida.tools.groups.grouppaths import GroupPath
     from tabulate import tabulate
 
     path = GroupPath()
     table = []
-    for child in path.walk():
+    if show_all:
+        children = path.walk()
+    else:
+        children = path.children
+    for child in children:
         table.append([child.path, child.is_virtual, len(child)])
     echo.echo(tabulate(table, headers=['Path', 'Virtual', 'Children']))

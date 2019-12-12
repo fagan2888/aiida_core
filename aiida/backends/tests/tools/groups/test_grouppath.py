@@ -101,6 +101,25 @@ def test_cmndline():
     # print(result.output)
     assert result.output == (
         """\
+Path    Virtual      Children
+------  ---------  ----------
+a       False               3
+"""
+    )
+
+
+def test_cmndline_all():
+    """Test ``verdi group path``"""
+    from aiida.cmdline.commands.cmd_group import group_path
+    from click.testing import CliRunner
+    for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
+        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
+    cli_runner = CliRunner()
+    result = cli_runner.invoke(group_path, ['-l'])
+    assert result.exit_code == 0, result.exception
+    # print(result.output)
+    assert result.output == (
+        """\
 Path     Virtual      Children
 -------  ---------  ----------
 a        False               3
