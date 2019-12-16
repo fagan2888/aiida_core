@@ -69,7 +69,7 @@ def test_basic(new_database):
     assert not group_path['a'].is_virtual
     group_path['a'].delete_group()
     assert group_path['a'].is_virtual
-    assert GroupPath('a/b/c') == GroupPath('a/b/c')
+    assert GroupPath('a/b/c') == GroupPath('a/b') / 'c'
 
 
 def test_type_string(new_database):
@@ -90,8 +90,6 @@ def test_attr(new_database):
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f', 'bad space', 'bad@char', '_badstart']:
         orm.Group.objects.get_or_create(label)
     group_path = GroupPath()
-    # print(group_path.browse.a.c)
-    # print(group_path.browse.a.c())
     assert isinstance(group_path.browse.a.c.d, GroupAttr)
     assert isinstance(group_path.browse.a.c.d(), GroupPath)
     assert group_path.browse.a.c.d().path == 'a/c/d'
@@ -99,7 +97,8 @@ def test_attr(new_database):
     with pytest.raises(AttributeError):
         group_path.browse.a.c.x  # pylint: disable=pointless-statement
 
-def test_cmndline():
+
+def test_cmdline():
     """Test ``verdi group path``"""
     from aiida.cmdline.commands.cmd_group import group_path
     from click.testing import CliRunner
