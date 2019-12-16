@@ -39,7 +39,7 @@ class GroupPath:
         """Instantiate the class.
 
         :param path: The initial path of the group.
-        :param type_string: Used to query for and instantiate ``Group``s with.
+        :param type_string: Used to query for and instantiate a ``Group`` with.
         :param warn_invalid_child: Issue a warning, when iterating children, if a child path is invalid.
 
         """
@@ -68,7 +68,7 @@ class GroupPath:
 
     def __eq__(self, other):
         # type: (Any) -> bool
-        """Compare a ``GroupPath``s path and type string."""
+        """Compare path and type string to another ``GroupPath`` object."""
         if not isinstance(other, GroupPath):
             return False
         if other.path == self.path and other.type_string == self.type_string:
@@ -96,7 +96,7 @@ class GroupPath:
     @property
     def type_string(self):
         # type: () -> str
-        """Return the type_string used to query for and instantiate ``Group``s with."""
+        """Return the type_string used to query for and instantiate a ``Group`` with."""
         return self._type_string
 
     @property
@@ -194,7 +194,7 @@ class GroupPath:
                     )
                 except InvalidPath:
                     if self._warn_invalid_child:
-                        warnings.warn('invalid path encountered: {}'.format(path_string))
+                        warnings.warn('invalid path encountered: {}'.format(path_string))  # pylint: disable=no-member
 
     def __iter__(self):
         # type: () -> Iterable[GroupPath]
@@ -229,9 +229,9 @@ class GroupPath:
 
 
 class GroupAttr:
-    """A class to provide attribute access to a ``GroupPath``s children.
+    """A class to provide attribute access to a ``GroupPath`` children.
 
-    The only public attributes on this class are dynamically created from the ``GroupPath``s child keys.
+    The only public attributes on this class are dynamically created from the ``GroupPath`` child keys.
     NOTE: any child keys that do not conform to an acceptable (public) attribute string will be ignored.
     The ``GroupPath`` can be retrieved *via* a function call, e.g.::
 
