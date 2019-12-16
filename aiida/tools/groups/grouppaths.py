@@ -12,6 +12,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
+from functools import total_ordering
 import re
 from typing import Any, Iterable, List, Optional  # pylint: disable=unused-import
 import warnings
@@ -28,6 +29,7 @@ class InvalidPath(Exception):
     pass
 
 
+@total_ordering
 class GroupPath:
     """A class to provide label delimited access to groups.
 
@@ -68,12 +70,18 @@ class GroupPath:
 
     def __eq__(self, other):
         # type: (Any) -> bool
-        """Compare path and type string to another ``GroupPath`` object."""
+        """Compare equality of path and type string to another ``GroupPath`` object."""
         if not isinstance(other, GroupPath):
-            return False
-        if other.path == self.path and other.type_string == self.type_string:
-            return True
-        return False
+            return NotImplemented
+        return (self.path, self.type_string) == (other.path, other.type_string)
+
+    def __lt__(self, other):
+        # type: (Any) -> bool
+        """Compare less-than operator of path and type string to another ``GroupPath`` object."""
+        if not isinstance(other, GroupPath):
+            return NotImplemented
+        return (self.path, self.type_string) < (other.path, other.type_string)
+
 
     @property
     def path(self):
