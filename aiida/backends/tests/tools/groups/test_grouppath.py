@@ -15,31 +15,15 @@ from __future__ import absolute_import
 
 from textwrap import dedent
 
-import pytest
 from click.testing import CliRunner
+import pytest
 
 from aiida import orm
 from aiida.cmdline.commands.cmd_group import group_path_ls
 from aiida.tools.groups.grouppaths import GroupAttr, GroupPath, InvalidPath
 
 
-@pytest.fixture(scope='session')
-def fixture_environment():
-    """Setup a complete AiiDA test environment, with configuration, profile, database and repository."""
-    from aiida.manage.fixtures import fixture_manager
-
-    with fixture_manager() as manager:
-        yield manager
-
-
-@pytest.fixture(scope='function')
-def new_database(fixture_environment):
-    """Clear the database after each test."""
-    yield
-    fixture_environment.reset_db()
-
-
-def test_basic(new_database):
+def test_basic(clear_database):
     """Test the basic functionality of ``GroupPath``."""
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
         orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
@@ -76,7 +60,7 @@ def test_basic(new_database):
     assert GroupPath('a/b/c') == GroupPath('a/b') / 'c'
 
 
-def test_type_string(new_database):
+def test_type_string(clear_database):
     """Test that only the type_string instantiated in ``GroupPath`` is returned."""
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g']:
         orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
@@ -89,7 +73,7 @@ def test_type_string(new_database):
     assert GroupPath('a/b/c') != GroupPath('a/b/c', type_string=orm.GroupTypeString.UPFGROUP_TYPE.value)
 
 
-def test_attr(new_database):
+def test_attr(clear_database):
     """Test ``GroupAttr``."""
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f', 'bad space', 'bad@char', '_badstart']:
         orm.Group.objects.get_or_create(label)
@@ -102,7 +86,7 @@ def test_attr(new_database):
         group_path.browse.a.c.x  # pylint: disable=pointless-statement
 
 
-def test_cmdline_group_path_ls(new_database):
+def test_cmdline_group_path_ls(clear_database):
     """Test ``verdi group path ls``"""
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
         group, _ = orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)

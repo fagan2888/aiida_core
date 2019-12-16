@@ -82,7 +82,6 @@ class GroupPath:
             return NotImplemented
         return (self.path, self.type_string) < (other.path, other.type_string)
 
-
     @property
     def path(self):
         # type: () -> str
