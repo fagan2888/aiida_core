@@ -355,20 +355,64 @@ def group_copy(source_group, destination_group):
     echo.echo_success('Nodes copied from group<{}> to group<{}>'.format(source_group.label, dest_group.label))
 
 
-@verdi_group.command('path')
-@click.option('-l', 'show_all', is_flag=True, default=False, help='Show all group paths')
-@with_dbenv()
-def group_path(show_all):
-    """Show a list of existing groups."""
-    from aiida.tools.groups.grouppaths import GroupPath
-    from tabulate import tabulate
+@verdi_group.group('path')
+def verdi_group_path():
+    """Inspect groups of nodes, with delimited label paths."""
 
-    path = GroupPath()
-    table = []
-    if show_all:
+
+@verdi_group_path.command('ls')
+@click.argument('path', type=click.STRING, required=False)
+@click.option('-R', '--recursive', is_flag=True, default=False, help='Recursively list sub-paths encountered')
+@click.option('-l', '--long', 'as_table', is_flag=True, default=False, help='List in long format')
+@click.option(
+    '-d', '--with-description', 'with_description', is_flag=True, default=False, help='Show also the group description'
+)
+@click.option(
+    '-g', '--groups-only', 'groups_only', is_flag=True, default=False, help='Only show paths that contain a group'
+)
+@click.option(
+    '-t',
+    '--type',
+    'group_type',
+    type=types.LazyChoice(valid_group_type_strings),
+    default=user_defined_group,
+    help='Show groups of a specific type, instead of user-defined groups. Start with semicolumn if you want to '
+    'specify aiida-internal type'
+)
+@with_dbenv()
+def group_path_ls(path, recursive, as_table, groups_only, group_type, with_description):
+    """Show a list of existing group paths."""
+    from aiida.tools.groups.grouppaths import GroupPath, InvalidPath
+
+    try:
+        path = GroupPath(path or '', type_string=group_type)
+    except InvalidPath as err:
+        echo.echo_critical(str(err))
+
+    if recursive:
         children = path.walk()
     else:
         children = path.children
-    for child in children:
-        table.append([child.path, child.is_virtual, len(child)])
-    echo.echo(tabulate(table, headers=['Path', 'Virtual', 'Children']))
+
+    if as_table or with_description:
+        from tabulate import tabulate
+        headers = ['Path', 'Sub-Groups']
+        if with_description:
+            headers.append('Description')
+        rows = []
+        for child in sorted(children):
+            if groups_only and child.is_virtual:
+                continue
+            row = [
+                child.path if child.is_virtual else click.style(child.path, bold=True),
+                len([c for c in child.walk() if not c.is_virtual])
+            ]
+            if with_description:
+                row.append('-' if child.is_virtual else child.group.description)
+            rows.append(row)
+        echo.echo(tabulate(rows, headers=headers))
+    else:
+        for child in sorted(children):
+            if groups_only and child.is_virtual:
+                continue
+            echo.echo(child.path, bold=not child.is_virtual)

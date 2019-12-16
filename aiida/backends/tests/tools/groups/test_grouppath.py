@@ -13,9 +13,13 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
+from textwrap import dedent
+
 import pytest
+from click.testing import CliRunner
 
 from aiida import orm
+from aiida.cmdline.commands.cmd_group import group_path_ls
 from aiida.tools.groups.grouppaths import GroupAttr, GroupPath, InvalidPath
 
 
@@ -60,12 +64,12 @@ def test_basic(new_database):
     assert group_path['a'].group is not None
     assert group_path['a'].get_or_create_group()[1] is False
     assert len(group_path) == 1
-    assert sorted([(c.path, c.is_virtual) for c in group_path.children]) == [('a', False)]
+    assert [(c.path, c.is_virtual) for c in group_path.children] == [('a', False)]
     child = next(group_path.children)
     assert child.parent == group_path
     assert len(child) == 3
-    assert sorted([(c.path, c.is_virtual) for c in child]) == [('a/b', False), ('a/c', True), ('a/f', False)]
-    assert sorted([c.path for c in group_path.walk()]) == ['a', 'a/b', 'a/c', 'a/c/d', 'a/c/e', 'a/c/e/g', 'a/f']
+    assert [(c.path, c.is_virtual) for c in sorted(child)] == [('a/b', False), ('a/c', True), ('a/f', False)]
+    assert [c.path for c in sorted(group_path.walk())] == ['a', 'a/b', 'a/c', 'a/c/d', 'a/c/e', 'a/c/e/g', 'a/f']
     assert not group_path['a'].is_virtual
     group_path['a'].delete_group()
     assert group_path['a'].is_virtual
@@ -98,45 +102,86 @@ def test_attr(new_database):
         group_path.browse.a.c.x  # pylint: disable=pointless-statement
 
 
-def test_cmdline():
-    """Test ``verdi group path``"""
-    from aiida.cmdline.commands.cmd_group import group_path
-    from click.testing import CliRunner
+def test_cmdline_group_path_ls(new_database):
+    """Test ``verdi group path ls``"""
     for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
-        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
-    cli_runner = CliRunner()
-    result = cli_runner.invoke(group_path)
-    assert result.exit_code == 0, result.exception
-    # print(result.output)
-    assert result.output == (
-        """\
-Path    Virtual      Children
-------  ---------  ----------
-a       False               3
-"""
-    )
+        group, _ = orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
+        group.description = 'A description of {}'.format(label)
+    orm.Group.objects.get_or_create('a/x', type_string=orm.GroupTypeString.UPFGROUP_TYPE.value)
 
-
-def test_cmndline_all():
-    """Test ``verdi group path -l``"""
-    from aiida.cmdline.commands.cmd_group import group_path
-    from click.testing import CliRunner
-    for label in ['a', 'a/b', 'a/c/d', 'a/c/e/g', 'a/f']:
-        orm.Group.objects.get_or_create(label, type_string=orm.GroupTypeString.USER.value)
     cli_runner = CliRunner()
-    result = cli_runner.invoke(group_path, ['-l'])
+
+    result = cli_runner.invoke(group_path_ls)
     assert result.exit_code == 0, result.exception
-    print(result.output)
-    assert result.output == (
-        """\
-Path     Virtual      Children
--------  ---------  ----------
-a        False               3
-a/f      False               0
-a/c      True                2
-a/c/e    True                1
-a/c/e/g  False               0
-a/c/d    False               0
-a/b      False               0
-"""
-    )
+    assert result.output == 'a\n'
+
+    result = cli_runner.invoke(group_path_ls, ['a'])
+    assert result.exit_code == 0, result.exception
+    assert result.output == 'a/b\na/c\na/f\n'
+
+    result = cli_runner.invoke(group_path_ls, ['a/c'])
+    assert result.exit_code == 0, result.exception
+    assert result.output == 'a/c/d\na/c/e\n'
+
+    for tag in ['-R', '--recursive']:
+        result = cli_runner.invoke(group_path_ls, [tag])
+        assert result.exit_code == 0, result.exception
+        assert result.output == 'a\na/b\na/c\na/c/d\na/c/e\na/c/e/g\na/f\n'
+
+        result = cli_runner.invoke(group_path_ls, [tag, 'a/c'])
+        assert result.exit_code == 0, result.exception
+        assert result.output == 'a/c/d\na/c/e\na/c/e/g\n'
+
+    for tag in ['-l', '--long']:
+        result = cli_runner.invoke(group_path_ls, [tag])
+        assert result.exit_code == 0, result.exception
+        assert result.output == dedent(
+            """\
+            Path      Sub-Groups
+            ------  ------------
+            a                  4
+            """
+        )
+
+        result = cli_runner.invoke(group_path_ls, [tag, '-d', 'a'])
+        assert result.exit_code == 0, result.exception
+        assert result.output == dedent(
+            """\
+            Path      Sub-Groups  Description
+            ------  ------------  --------------------
+            a/b                0  A description of a/b
+            a/c                2  -
+            a/f                0  A description of a/f
+            """
+        )
+
+        result = cli_runner.invoke(group_path_ls, [tag, '-R'])
+        assert result.exit_code == 0, result.exception
+        assert result.output == dedent(
+            """\
+            Path       Sub-Groups
+            -------  ------------
+            a                   4
+            a/b                 0
+            a/c                 2
+            a/c/d               0
+            a/c/e               1
+            a/c/e/g             0
+            a/f                 0
+            """
+        )
+
+    for tag in ['-g', '--groups-only']:
+        result = cli_runner.invoke(group_path_ls, [tag, '-l', '-R', '--with-description'])
+        assert result.exit_code == 0, result.exception
+        assert result.output == dedent(
+            """\
+            Path       Sub-Groups  Description
+            -------  ------------  ------------------------
+            a                   4  A description of a
+            a/b                 0  A description of a/b
+            a/c/d               0  A description of a/c/d
+            a/c/e/g             0  A description of a/c/e/g
+            a/f                 0  A description of a/f
+            """
+        )
